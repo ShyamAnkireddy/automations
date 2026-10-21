@@ -1,5 +1,7 @@
 import logging
 import os
+import shutil
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,17 @@ SCREENSHOTS_DIR = REPORTS_DIR / "screenshots"
 LOGS_DIR = REPORTS_DIR / "logs"
 for directory in (REPORTS_DIR, SCREENSHOTS_DIR, LOGS_DIR, REPORTS_DIR / "videos"):
     directory.mkdir(parents=True, exist_ok=True)
+
+VIDEOS_DIR = REPORTS_DIR / "videos"
+
+
+def _clear_directory(directory):
+    for path in directory.iterdir():
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
 
 load_dotenv(ROOT_DIR / ".env")
 
@@ -49,12 +62,6 @@ def logger():
     return LOGGER
 
 
-@pytest.fixture
-def page(page):
-    """Use pytest-playwright's standard page fixture."""
-    return page
-
-
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
@@ -65,21 +72,63 @@ def pytest_runtest_makereport(item, call):
             "pytest failure | test=%s | phase=%s | message=%s",
             item.nodeid, report.when, str(report.longrepr)[:4000],
         )
-        # The call-phase report is produced before fixture teardown, so the page
-        # is still available for a failure screenshot here.
+    if report.when == "call" and item.get_closest_marker("ui"):
         page = item.funcargs.get("page")
-        if page is not None and report.when == "call":
+        if page is not None:
+            index = item.session.items.index(item) + 1
             safe_name = "".join(
                 char if char.isalnum() or char in "-_" else "_"
                 for char in item.nodeid
-            )[-140:]
-            screenshot_path = SCREENSHOTS_DIR / f"{safe_name}.png"
+            )[-120:]
+            screenshot_path = SCREENSHOTS_DIR / f"{index:04d}_{safe_name}.png"
             try:
                 page.screenshot(path=str(screenshot_path), full_page=True)
-                LOGGER.error("Failure screenshot: %s", screenshot_path)
-            except Exception as exc:
-                LOGGER.exception("Could not save failure screenshot: %s", exc)
+                LOGGER.info("UI screenshot: %s", screenshot_path)
+            except Exception:
+                LOGGER.exception(
+                    "Could not save UI screenshot for %s", item.nodeid
+                )
 
 
 def pytest_configure(config):
+    _clear_directory(SCREENSHOTS_DIR)
+    _clear_directory(VIDEOS_DIR)
+
+    if not config.pluginmanager.hasplugin("html"):
+        raise pytest.UsageError(
+            "pytest-html is required to create a timestamped HTML report. "
+            "Install dependencies from requirements.txt."
+        )
+    if not hasattr(config.option, "video"):
+        raise pytest.UsageError(
+            "pytest-playwright is required to capture UI videos. "
+            "Install dependencies from requirements.txt."
+        )
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    config._report_timestamp = timestamp
+    config.option.htmlpath = str(REPORTS_DIR / f"test-report-{timestamp}.html")
+    config.option.self_contained_html = True
+    config.option.video = "on"
+    config.option.output = str(VIDEOS_DIR)
     LOGGER.info("Starting pytest run. Root=%s", ROOT_DIR)
+
+
+def pytest_collection_finish(session):
+    markers = {
+        marker
+        for item in session.items
+        for marker in ("ui", "api")
+        if item.get_closest_marker(marker)
+    }
+    if len(markers) == 1:
+        report_type = markers.pop()
+    else:
+        report_type = "test"
+    timestamp = session.config._report_timestamp
+    report_path = REPORTS_DIR / f"{report_type}-report-{timestamp}.html"
+    session.config.option.htmlpath = str(report_path)
+    for plugin in session.config.pluginmanager.get_plugins():
+        if hasattr(plugin, "_report_path") and hasattr(plugin, "_report"):
+            plugin._report_path = report_path
+            plugin._report.title = report_path.name

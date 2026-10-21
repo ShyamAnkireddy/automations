@@ -1,10 +1,7 @@
-from common.ui.ui_constants import DEFAULT_BROWSER_TIMEOUT_MS
-
-
 class UIActions:
     """Reusable, site-agnostic Playwright actions."""
 
-    def __init__(self, page, timeout_ms=DEFAULT_BROWSER_TIMEOUT_MS):
+    def __init__(self, page, timeout_ms=30_000):
         self.page = page
         self.timeout_ms = timeout_ms
 

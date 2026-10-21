@@ -1,7 +1,7 @@
 # Python + pytest + Playwright Automation Framework
 
 A starter framework with shared API/UI utilities, Page Objects, test data, pytest fixtures,
-HTML reports, failure screenshots/logs, and Playwright video capture on failure.
+timestamped HTML reports, per-test UI screenshots and videos, and logs.
 
 ## Folder structure
 
@@ -12,8 +12,7 @@ python_pytest_playwright_framework/
 │   │   ├── api_actions.py
 │   │   └── api_constants.py
 │   └── ui/
-│       ├── ui_actions.py
-│       └── ui_constants.py
+│       └── ui_actions.py
 ├── pageObjects/
 │   └── amazon_page.py
 ├── testData/
@@ -71,21 +70,19 @@ From the project root:
 
 ```bash
 # API demo tests only (no browser required)
-pytest tests/api -v --html=reports/api-report.html --self-contained-html
+pytest tests/api
 
 # Amazon UI test (opens Amazon, searches, checks the first result)
-pytest tests/ui -v --browser chromium --headed   --video retain-on-failure --output reports/videos   --html=reports/ui-report.html --self-contained-html
-
-# Headless UI run
-pytest tests/ui -v --browser chromium   --video retain-on-failure --output reports/videos   --html=reports/ui-report.html --self-contained-html
-
-# Full suite
-pytest -v --browser chromium --video retain-on-failure   --output reports/artifacts --html=reports/report.html --self-contained-html
+pytest tests/ui --headed
 ```
 
-Playwright video artifacts are written below `reports/videos/`; the framework also writes
-failure screenshots and logs under `reports/screenshots/` and `reports/logs/`.
-HTML reports are written to `reports/*.html`.
+Every pytest run creates a self-contained HTML report under `reports/`, named
+`ui-report-<timestamp>.html` or `api-report-<timestamp>.html` for UI-only or API-only
+runs. Mixed runs use `test-report-<timestamp>.html`.
+UI tests save a screenshot and video for each test under `reports/screenshots/` and
+`reports/videos/`. Those two artifact folders are cleared at the start of each run;
+timestamped reports are retained so runs do not overwrite one another. Logs are written
+under `reports/logs/`.
 
 ## 3. Example tests
 
